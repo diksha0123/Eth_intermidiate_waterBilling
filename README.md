@@ -1,7 +1,9 @@
-#**frontEnd of Waterbilling system**
+**FrontEnd of Waterbilling system**
+
 In this I have designed a frontend with a smart contract from where owner can check the water bills. It is a D-App as it is based on blockchain.
 
-#**How to use**
+**How to use**
+
 After cloning the github, you will want to do the following to get the code running on your computer.
 
 1. Inside the project directory, in the terminal type: npm i
