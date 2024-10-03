@@ -1,233 +1,198 @@
-import React, { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
-import waterBillingAbi from '/workspace/Voting/artifacts/contracts/WaterBilling.sol/WaterBilling.json';  // Add your ABI here
+import { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import atm_abi from "../artifacts/contracts/Assessment.sol/Assessment.json";
 
-const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";  // Update with your contract address
+export default function HomePage() {
+    const [ethWallet, setEthWallet] = useState(undefined);
+    const [account, setAccount] = useState(undefined);
+    const [atm, setATM] = useState(undefined);
+    const [balance, setBalance] = useState(undefined);
 
-export default function WaterBillingApp() {
-  const [account, setAccount] = useState(null);
-  const [waterBilling, setWaterBilling] = useState(null);
-  const [usage, setUsage] = useState('');
-  const [bill, setBill] = useState('0');
-  const [networkName, setNetworkName] = useState('');
-  const [error, setError] = useState('');
-  const [usages, setUsages] = useState([]);  // State for storing recorded usages
+    const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+    const atmABI = atm_abi.abi;
 
-  useEffect(() => {
-    checkIfWalletIsConnected();
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', handleAccountChange);
-      window.ethereum.on('chainChanged', () => window.location.reload());
-    }
-  }, []);
-
-  const checkIfWalletIsConnected = async () => {
-    try {
-      if (window.ethereum) {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          await initializeContract();
-        } else {
-          setError("Please connect to MetaMask.");
+    const getWallet = async () => {
+        if (window.ethereum) {
+            setEthWallet(window.ethereum);
         }
-      } else {
-        setError("Please install MetaMask.");
-      }
-    } catch (error) {
-      setError("Failed to connect to MetaMask.");
-    }
-  };
 
-  const handleAccountChange = async (accounts) => {
-    if (accounts.length > 0) {
-      setAccount(accounts[0]);
-      await initializeContract();
-    } else {
-      setAccount(null);
-      setWaterBilling(null);
-    }
-  };
+        if (ethWallet) {
+            const account = await ethWallet.request({ method: "eth_accounts" });
+            handleAccount(account);
+        }
+    };
 
-  const connectWallet = async () => {
-    try {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      setAccount(accounts[0]);
-      await initializeContract();
-    } catch (error) {
-      setError("Failed to connect wallet.");
-    }
-  };
+    const handleAccount = (account) => {
+        if (account) {
+            console.log("Account connected: ", account);
+            setAccount(account);
+        } else {
+            console.log("No account found");
+        }
+    };
 
-  const initializeContract = async () => {
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, waterBillingAbi, signer);
-      setWaterBilling(contract);
+    const connectAccount = async () => {
+        if (!ethWallet) {
+            alert("MetaMask wallet is required to connect");
+            return;
+        }
 
-      const network = await provider.getNetwork();
-      setNetworkName(network.name);
-    } catch (error) {
-      setError("");
-    }
-  };
+        const accounts = await ethWallet.request({
+            method: "eth_requestAccounts",
+        });
+        handleAccount(accounts);
 
-  const recordUsage = async () => {
-    if (!waterBilling) return;
-    try {
-      // Ensure MetaMask transaction happens when recording usage
-      const tx = await waterBilling.recordUsage(account, ethers.BigNumber.from(usage));
-      await tx.wait();  // Wait for the transaction to be mined
-      alert("Usage recorded!");
+        // once wallet is set we can get a reference to our deployed contract
+        getATMContract();
+    };
 
-      // Add the recorded usage to the list of usages and reset input
-      setUsages([...usages, usage]);
-      setUsage('');
-    } catch (error) {
-      setError("Failed to record usage. Make sure MetaMask is connected.");
-    }
-  };
+    const getATMContract = () => {
+        const provider = new ethers.providers.Web3Provider(ethWallet);
+        const signer = provider.getSigner();
+        const atmContract = new ethers.Contract(
+            contractAddress,
+            atmABI,
+            signer
+        );
 
-  const calculateBill = async () => {
-    if (!waterBilling) return;
-    try {
-      // Ensure MetaMask transaction happens when calculating the bill
-      const tx = await waterBilling.calculateBill(account);
-      await tx.wait();  // Wait for the transaction to be mined
-      const billAmount = await waterBilling.bills(account);
-      setBill(ethers.utils.formatEther(billAmount));
-    } catch (error) {
-      setError("Failed to calculate bill. Make sure MetaMask is connected.");
-    }
-  };
+        setATM(atmContract);
+    };
 
-  const payBill = async () => {
-    if (!waterBilling || bill === '0') return;
-    try {
-      // Ensure MetaMask transaction happens when paying the bill
-      const tx = await waterBilling.payBill({ value: ethers.utils.parseEther(bill) });
-      await tx.wait();  // Wait for the transaction to be mined
-      alert("Bill paid successfully!");
-      setBill('0');
-    } catch (error) {
-      setError("Failed to pay bill. Make sure MetaMask is connected.");
-    }
-  };
+    const getBalance = async () => {
+        if (atm) {
+            setBalance((await atm.getBalance()).toNumber());
+        }
+    };
 
-  return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h1>Water Billing System</h1>
-        {error && <p style={styles.error}>{error}</p>}
-        {!account ? (
-          <button style={styles.primaryBtn} onClick={connectWallet}>Connect Wallet</button>
-        ) : (
-          <div>
-            <p><strong>Connected to:</strong> {account}</p>
-            <p><strong>Network:</strong> {networkName}</p>
+    const deposit = async () => {
+        if (atm) {
+            const amount = document.getElementById("amount").value;
+            let tx = await atm.deposit(amount);
+            await tx.wait();
+            getBalance();
+        }
+    };
 
-            {/* Input Section */}
-            <div style={styles.inputSection}>
-              <input
-                type="number"
-                style={styles.inputField}
-                placeholder="Enter water usage (in units)"
-                value={usage}
-                onChange={(e) => setUsage(e.target.value)}
-              />
-              <button style={styles.primaryBtn} onClick={recordUsage}>Record Usage</button>
+    const withdraw = async () => {
+        if (atm) {
+            const amount = document.getElementById("amount").value;
+            let tx = await atm.withdraw(amount);
+            await tx.wait();
+            getBalance();
+        }
+    };
+
+    const withdrawAll = async () => {
+        if (atm) {
+            let tx = await atm.withdrawAll(1, { gasLimit: 200000 });
+            await tx.wait();
+            getBalance();
+        }
+    };
+
+    const initUser = () => {
+        // Check to see if user has Metamask
+        if (!ethWallet) {
+            return <p>Please install Metamask in order to get the water bill.</p>;
+        }
+
+        // Check to see if user is connected. If not, connect to their account
+        if (!account) {
+            return (
+                <button className="btn" onClick={connectAccount}>
+                    Please connect your Metamask wallet
+                </button>
+            );
+        }
+
+        if (balance == undefined) {
+            getBalance();
+        }
+
+        return (
+            <div className="h-full flex flex-col items-center justify-center">
+                <h6 className="flex justify-center font-black text-4xl">
+                    {balance}
+                    <span className="text-yellow-400 ms-2">Wallet</span>
+                </h6>
+                <h6 className="mt-2 mb-40 border-2 border-neutral-600 border-neutral-500 p-1 rounded text-xs">
+                    {account}
+                </h6>
+                <div className="flex items-center justify-evenly">
+                    <button className="btn m-2" onClick={deposit}>
+                        Get Bill
+                    </button>
+                    <button className="btn m-2" onClick={withdraw}>
+                        TOTAL
+                    </button>
+                    <button className="btn m-2" onClick={withdrawAll}>
+                        Continue
+                    </button>
+                </div>
+                <form className="flex items-center justify-center">
+                    <label className="text-xl me-1">Amount:</label>
+                    <input
+                        id="amount"
+                        type="number"
+                        className="bg-transparent border-2 border-neutral-600 p-1 rounded text-xl w-14"
+                        defaultValue={1}
+                        min={1}
+                    />
+                </form>
             </div>
+        );
+    };
 
-            {/* Display Recorded Usages */}
-            <div style={styles.usageHistory}>
-              <h3>Recorded Usages:</h3>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Usage (units)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usages.length > 0 ? usages.map((u, index) => (
-                    <tr key={index}>
-                      <td>{index + 1}</td>
-                      <td>{u}</td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan="2">No usage recorded yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+    useEffect(() => {
+        getWallet();
+    }, []);
+
+    return (
+        <main className="w-screen h-screen flex items-center justify-evenly">
+            <script src="https://cdn.tailwindcss.com"></script>
+            <link
+                href="https://cdn.jsdelivr.net/npm/daisyui@3.9.4/dist/full.css"
+                rel="stylesheet"
+                type="text/css"
+            />
+            <link
+                href="https://fonts.cdnfonts.com/css/chicago-2"
+                rel="stylesheet"
+            ></link>
+            <link
+                href="https://fonts.googleapis.com/css2?family=Roboto&display=swap"
+                rel="stylesheet"
+            ></link>
+
+            <div className="grid grid-cols-2 gap-64">
+                <header className="col-span-1 flex items-center">
+                    <h2 className="font-normal text-8xl text-cyan-400">
+                        Water-Billing System
+                    </h2>
+                </header>
+                <section className="col-span-1 h-screen flex justify-center items-center">
+                    {initUser()}
+                </section>
             </div>
+            <style jsx>
+                {`
+                    * {
+                        font-family: "Roboto", sans-serif;
+                    }
 
-            {/* Bill Section */}
-            <div style={styles.billSection}>
-              <button style={styles.primaryBtn} onClick={calculateBill}>Calculate Bill</button>
-              <p><strong>Bill Amount:</strong> {bill} ETH</p>
-            </div>
+                    body {
+                        background-color: #1a202c;
+                    }
 
-            <button style={styles.primaryBtn} onClick={payBill} disabled={bill === '0'}>Pay Bill</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+                    h1 {
+                        font-family: "Chicago", sans-serif;
+                    }
+
+                    .container {
+                        text-align: center;
+                    }
+                `}
+            </style>
+        </main>
+    );
 }
-
-const styles = {
-  container: {
-    maxWidth: '600px',
-    margin: '0 auto',
-    padding: '20px',
-    fontFamily: 'Arial, sans-serif',
-    textAlign: 'center',
-    backgroundColor: '#f4f4f9',
-  },
-  card: {
-    background: '#fff',
-    padding: '20px',
-    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-    borderRadius: '8px',
-  },
-  primaryBtn: {
-    backgroundColor: '#28a745',
-    color: 'white',
-    padding: '10px 20px',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    marginTop: '10px',
-  },
-  inputSection: {
-    marginBottom: '20px',
-  },
-  inputField: {
-    padding: '10px',
-    width: '100%',
-    maxWidth: '300px',
-    border: '1px solid #ccc',
-    borderRadius: '4px',
-    fontSize: '16px',
-    marginRight: '10px',
-  },
-  usageHistory: {
-    marginTop: '20px',
-    textAlign: 'left',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-  },
-  billSection: {
-    marginTop: '20px',
-  },
-  error: {
-    color: 'red',
-    marginBottom: '20px',
-  },
-};
